@@ -1,37 +1,63 @@
 import streamlit as st
 import time
 from model import get_response
+from database import create_table, register_user, authenticate_user
 
-# Dummy user credentials (you can replace this with a database)
-USER_CREDENTIALS = {"admin": "password123", "user": "chatbot123"}
+# Initialize DB table
+create_table()
 
 # Set page title
 st.set_page_config(page_title="🧠 Mental Health Chatbot", layout="centered")
 
-# Initialize session state for authentication
+# Initialize session state
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
-# Function to check login credentials
-def login(username, password):
-    if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
-        st.session_state.authenticated = True
-        st.session_state.username = username
-    else:
-        st.error("Invalid username or password!")
+# Function to switch between login & register pages
+def switch_page():
+    st.session_state.page = "register" if st.session_state.page == "login" else "login"
 
-# Login Page
+# Default page: login
+if "page" not in st.session_state:
+    st.session_state.page = "login"
+
+# **Registration Page**
+if st.session_state.page == "register":
+    st.title("📝 Register to Access the Chatbot")
+    
+    username = st.text_input("Choose a Username")
+    password = st.text_input("Choose a Password", type="password")
+    
+    if st.button("Register"):
+        if register_user(username, password):
+            st.success("✅ Registration successful! Please login.")
+            switch_page()
+        else:
+            st.error("⚠️ Username already exists!")
+
+    st.button("Already have an account? Login", on_click=switch_page)
+    st.stop()
+
+# **Login Page**
 if not st.session_state.authenticated:
     st.title("🔐 Login to Mental Health Chatbot")
     
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
+    
     if st.button("Login"):
-        login(username, password)
+        if authenticate_user(username, password):
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            st.success("✅ Login successful!")
+            st.rerun()
+        else:
+            st.error("❌ Invalid username or password!")
 
-    st.stop()  # Stop execution here if not logged in
+    st.button("New user? Register", on_click=switch_page)
+    st.stop()
 
-# Chatbot Page (only accessible after login)
+# **Chatbot Page (only after login)**
 st.title("🧠 Mental Health Chatbot")
 
 # Sidebar info
@@ -41,8 +67,7 @@ with st.sidebar:
     st.write("🤖 This chatbot provides basic mental health support.")
     st.write("💡 It is not a replacement for professional help.")
     st.write("📞 If you need urgent help, reach out to a professional.")
-    
-    # Logout button
+
     if st.button("Logout"):
         st.session_state.authenticated = False
         st.rerun()
@@ -58,15 +83,12 @@ for message in st.session_state.messages:
 
 # User input handling
 if prompt := st.chat_input("How are you feeling today?"):
-    # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    # Show typing effect for bot response
     with st.chat_message("assistant"):
         bot_response_placeholder = st.empty()
         time.sleep(1)  # Simulate thinking delay
         bot_response = get_response(prompt)
         bot_response_placeholder.markdown(bot_response)
 
-    # Add bot response to history
     st.session_state.messages.append({"role": "assistant", "content": bot_response})
