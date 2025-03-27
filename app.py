@@ -1,94 +1,80 @@
 import streamlit as st
-import time
+import sqlite3
+import bcrypt
 from model import get_response
-from database import create_table, register_user, authenticate_user
 
-# Initialize DB table
-create_table()
+# Database setup
+def init_db():
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users 
+                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT)''')
+    conn.commit()
+    conn.close()
 
-# Set page title
-st.set_page_config(page_title="🧠 Mental Health Chatbot", layout="centered")
+def register_user(username, password):
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    hashed_pw = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    try:
+        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_pw))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
 
-# Initialize session state
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+def authenticate_user(username, password):
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT password FROM users WHERE username = ?", (username,))
+    user = c.fetchone()
+    conn.close()
+    if user and bcrypt.checkpw(password.encode(), user[0]):
+        return True
+    return False
 
-# Function to switch between login & register pages
-def switch_page():
-    st.session_state.page = "register" if st.session_state.page == "login" else "login"
+# Initialize database
+init_db()
 
-# Default page: login
-if "page" not in st.session_state:
-    st.session_state.page = "login"
+# Streamlit UI
+st.title("🧠 Mental Health Chatbot - Login/Register")
 
-# **Registration Page**
-if st.session_state.page == "register":
-    st.title("📝 Register to Access the Chatbot")
-    
-    username = st.text_input("Choose a Username")
-    password = st.text_input("Choose a Password", type="password")
-    
-    if st.button("Register"):
-        if register_user(username, password):
-            st.success("✅ Registration successful! Please login.")
-            switch_page()
+menu = ["Login", "Register"]
+choice = st.sidebar.selectbox("Menu", menu)
+
+if choice == "Register":
+    st.subheader("Create an Account")
+    new_user = st.text_input("Username")
+    new_password = st.text_input("Password", type="password")
+    if st.button("Sign Up"):
+        if register_user(new_user, new_password):
+            st.success("Account created successfully! Please login.")
         else:
-            st.error("⚠️ Username already exists!")
+            st.error("Username already exists. Try a different one.")
 
-    st.button("Already have an account? Login", on_click=switch_page)
-    st.stop()
-
-# **Login Page**
-if not st.session_state.authenticated:
-    st.title("🔐 Login to Mental Health Chatbot")
-    
+elif choice == "Login":
+    st.subheader("Login to Chat")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
-    
     if st.button("Login"):
         if authenticate_user(username, password):
-            st.session_state.authenticated = True
-            st.session_state.username = username
-            st.success("✅ Login successful!")
-            st.rerun()
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = username
+            st.success("Login successful! Start chatting.")
         else:
-            st.error("❌ Invalid username or password!")
+            st.error("Invalid username or password.")
 
-    st.button("New user? Register", on_click=switch_page)
-    st.stop()
-
-# **Chatbot Page (only after login)**
-st.title("🧠 Mental Health Chatbot")
-
-# Sidebar info
-with st.sidebar:
-    st.header("About the Chatbot")
-    st.write(f"👤 Logged in as **{st.session_state.username}**")
-    st.write("🤖 This chatbot provides basic mental health support.")
-    st.write("💡 It is not a replacement for professional help.")
-    st.write("📞 If you need urgent help, reach out to a professional.")
-
-    if st.button("Logout"):
-        st.session_state.authenticated = False
-        st.rerun()
-
-# Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Display chat messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# User input handling
-if prompt := st.chat_input("How are you feeling today?"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    with st.chat_message("assistant"):
-        bot_response_placeholder = st.empty()
-        time.sleep(1)  # Simulate thinking delay
-        bot_response = get_response(prompt)
-        bot_response_placeholder.markdown(bot_response)
-
-    st.session_state.messages.append({"role": "assistant", "content": bot_response})
+# Chatbot interface
+if st.session_state.get("authenticated", False):
+    st.title("🧠 Mental Health Chatbot")
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    if prompt := st.chat_input("How are you feeling today?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        response = get_response(prompt)
+        st.session_state.messages.append({"role": "assistant", "content": response})
