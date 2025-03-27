@@ -6,7 +6,7 @@ from student_database import authenticate_student
 # Set page title
 st.set_page_config(page_title="🧠 Student Chatbot", layout="centered")
 
-# Initialize session state
+# Initialize session state for login
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
@@ -14,8 +14,8 @@ if "authenticated" not in st.session_state:
 if not st.session_state.authenticated:
     st.title("🔐 Student Login")
     
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    username = st.text_input("Username", key="username_input")
+    password = st.text_input("Password", type="password", key="password_input")
     
     if st.button("Login"):
         if authenticate_student(username, password):
@@ -23,11 +23,11 @@ if not st.session_state.authenticated:
             st.session_state.username = username
             st.success("✅ Login successful! Redirecting to chatbot...")
             time.sleep(1)
-            st.rerun()
+            st.rerun()  # Redirect to chatbot after login
         else:
             st.error("❌ Invalid username or password!")
 
-    st.stop()  # Prevent showing chatbot unless logged in
+    st.stop()  # Prevent chatbot UI from showing before login
 
 # **Chatbot Page (only after login)**
 st.title("🧠 Student Chatbot")
@@ -51,7 +51,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User input handling
+# **Direct chat input (No extra name field!)**
 if prompt := st.chat_input("Ask me anything!"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
